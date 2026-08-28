@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     razorpay_webhook_secret: str
     openai_api_key: str
     database_url: str = "sqlite+aiosqlite:///./revenue_recovery.db"
+    # 1 "logical hour" in the Guardrail bounds table = this many real seconds.
+    # Default 3600 = real-time (production). Lower it for a live demo so multi-hour
+    # cooldowns compress into a session instead of requiring real wall-clock waits.
+    time_scale_seconds_per_hour: float = 3600.0
 
     @classmethod
     def settings_customise_sources(

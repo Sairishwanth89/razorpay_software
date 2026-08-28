@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models import Decision, Event
 from app.razorpay_client import client
 from app.schemas import EventType, GuardrailVerdict, InterventionType, StrategistProposal
@@ -76,6 +77,12 @@ TOTAL_DISCOUNT_CAP_PCT = 3
 RESOLVED_LIVE_STATUSES = {"paid", "captured", "active", "completed", "cancelled"}
 
 
+def logical_delta(hours: float) -> timedelta:
+    """Convert a "logical hours" bound into a real timedelta, scaled per settings
+    so a multi-day batch can replay inside one live demo session."""
+    return timedelta(seconds=hours * settings.time_scale_seconds_per_hour)
+
+
 def check_preflight(event: Event, attempt_number: int, last_decision_at: datetime | None):
     """Cheap checks before ever calling Strategist. Returns (outcome, reason) to short-circuit, or None to proceed.
     outcome is one of: "cooldown", "escalated", "unresolved"."""
@@ -89,7 +96,7 @@ def check_preflight(event: Event, attempt_number: int, last_decision_at: datetim
         return bounds["close_as"], f"attempt {attempt_number} exceeds max_attempts {bounds['max_attempts']}"
 
     if last_decision_at is not None:
-        cooldown = timedelta(hours=bounds["cooldown_hours"])
+        cooldown = logical_delta(bounds["cooldown_hours"])
         if datetime.now(UTC) - last_decision_at < cooldown:
             return "cooldown", "cooldown window has not elapsed since the last attempt"
 
