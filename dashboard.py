@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 
@@ -136,6 +137,26 @@ def sequential_bg(value, vmin=0, vmax=100):
 def status_bg(value):
     color = STATUS_COLORS.get(value, "#c3c2b7")
     return f"background-color: {color}22; color: {color}; font-weight: 600;"
+
+
+def narrate_detail(detail_str: str) -> str:
+    """The audit_log.detail column is stored as raw JSON text - pull out whichever
+    field actually carries the plain-English story (rationale/reasoning/reason/issue,
+    in that priority order - matching what each agent actually names its narrative
+    field as) instead of showing a raw dict repr."""
+    if not detail_str or detail_str == "{}":
+        return "—"
+    try:
+        parsed = json.loads(detail_str)
+    except (TypeError, ValueError):
+        return str(detail_str)
+    if not isinstance(parsed, dict):
+        return str(parsed)
+    for key in ("rationale", "reasoning", "reason", "issue"):
+        if parsed.get(key):
+            return str(parsed[key])
+    parts = [f"{k}: {v}" for k, v in parsed.items() if v not in (None, "")]
+    return "; ".join(parts) if parts else "—"
 
 
 def bar_chart(counts: pd.Series, color_map: dict, label_map: dict):
@@ -303,6 +324,8 @@ if not exceptions.empty:
     ].copy()
     exceptions_display["amount"] = (exceptions_display["amount"].fillna(0) / 100).round(2)
     exceptions_display["event_type"] = exceptions_display["event_type"].map(CHANNEL_LABELS).fillna(exceptions_display["event_type"])
+    for col in ("customer_id", "failure_reason", "root_cause_category"):
+        exceptions_display[col] = exceptions_display[col].fillna("—")
     exceptions_display = exceptions_display.rename(
         columns={
             "id": "ID",
@@ -326,10 +349,36 @@ st.divider()
 st.markdown('<div class="section-title">Audit trail</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-caption">Most recent 300 entries - every agent\'s reasoning, in plain English</div>', unsafe_allow_html=True)
 if not audit.empty:
-    audit_display = audit[["created_at", "actor", "action", "event_id", "detail"]].rename(
+    event_ids = sorted(audit["event_id"].dropna().unique().tolist())
+    picked_event = st.selectbox(
+        "Filter to one event (follow a single case end to end)",
+        options=["All events"] + [int(e) for e in event_ids],
+    )
+
+    audit_display = audit[["created_at", "actor", "action", "event_id", "detail"]].copy()
+    if picked_event != "All events":
+        audit_display = audit_display[audit_display["event_id"] == picked_event]
+    audit_display["detail"] = audit_display["detail"].apply(narrate_detail)
+    # event_id is float64 (nullable-int columns come back that way from sqlite) - convert
+    # to a clean all-string column rather than fillna("—") on a float column, which leaves
+    # a mixed float/string dtype that Streamlit's Arrow serialization cannot handle.
+    audit_display["event_id"] = audit_display["event_id"].apply(lambda v: str(int(v)) if pd.notna(v) else "—")
+    audit_display = audit_display.rename(
         columns={"created_at": "Time", "actor": "Agent", "action": "Action", "event_id": "Event ID", "detail": "Detail"}
     )
-    st.dataframe(audit_display, width="stretch", hide_index=True, height=400)
+    st.dataframe(
+        audit_display,
+        width="stretch",
+        hide_index=True,
+        height=400,
+        column_config={
+            "Time": st.column_config.TextColumn(width="small"),
+            "Agent": st.column_config.TextColumn(width="medium"),
+            "Action": st.column_config.TextColumn(width="medium"),
+            "Event ID": st.column_config.TextColumn(width="small"),
+            "Detail": st.column_config.TextColumn(width="large"),
+        },
+    )
 else:
     st.caption("No audit entries yet.")
 
