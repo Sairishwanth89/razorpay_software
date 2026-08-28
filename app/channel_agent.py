@@ -151,13 +151,13 @@ async def process_event(event_id: int, channel_name: str) -> None:
                     event.id,
                     "critic",
                     "verified" if critic_verdict.grounded else "flagged",
-                    {"issue": critic_verdict.issue},
+                    {"rationale": critic_verdict.rationale},
                 )
             )
 
             if not critic_verdict.grounded:
                 verdict = GuardrailVerdict.rejected
-                reason = f"critic: {critic_verdict.issue}"
+                reason = f"critic: {critic_verdict.rationale}"
             else:
                 proposed_value = await expected_value(session, event, proposal.intervention_type.value)
                 slot_granted, slot_reason = await arbitrate_contact_slot(session, event, proposed_value)
@@ -201,7 +201,7 @@ async def process_event(event_id: int, channel_name: str) -> None:
                     "discount_pct": proposal.discount_pct,
                     "draft_message": proposal.draft_message,
                     "bounds": BOUNDS[EventType(event.event_type)],
-                    "critic_issue": critic_verdict.issue,
+                    "critic_rationale": critic_verdict.rationale,
                 },
                 created_at=datetime.now(UTC),
             )

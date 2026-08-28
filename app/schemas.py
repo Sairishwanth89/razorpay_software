@@ -54,7 +54,7 @@ class StrategistProposal(BaseModel):
 
 class CriticVerdict(BaseModel):
     grounded: bool
-    issue: str | None = None
+    rationale: str
 
 
 class RevenueAtRiskEvent(BaseModel):
