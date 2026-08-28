@@ -15,6 +15,7 @@ from app.agents.orchestrator import (
     arbitrate_contact_slot,
     arbitrate_discount_budget,
     arbitrate_escalation_slot,
+    check_customer_suppression,
     expected_value,
 )
 from app.agents.strategist import propose_intervention
@@ -119,6 +120,18 @@ async def process_event(event_id: int, channel_name: str) -> None:
                 return
             await _close_event(
                 session, event, outcome, reason, prior_decisions[-1].id if prior_decisions else None
+            )
+            await session.commit()
+            return
+
+        suppressed, suppression_reason = await check_customer_suppression(session, event)
+        if suppressed:
+            await _close_event(
+                session,
+                event,
+                "escalated",
+                f"orchestrator: {suppression_reason}",
+                prior_decisions[-1].id if prior_decisions else None,
             )
             await session.commit()
             return

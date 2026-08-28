@@ -23,6 +23,12 @@ MAX_CONCURRENT_ESCALATIONS = 15
 # Beta(1,1) mean - the neutral prior an arm gets before it has any data.
 DEFAULT_SUCCESS_RATE_PRIOR = 0.5
 
+# Past real contact attempts (executed actions that did not lead to recovery) for this
+# customer, across ANY of their other events, with zero recoveries ever, before further
+# automated outreach is suppressed. Deliberately counts only "failed" outcomes - not
+# amount-triggered immediate escalations, which reflect policy, not customer behavior.
+SUPPRESSION_THRESHOLD = 3
+
 
 def _audit(event_id: int | None, action: str, detail: dict) -> AuditLog:
     return AuditLog(event_id=event_id, actor="orchestrator", action=action, detail=detail, created_at=datetime.now(UTC))
@@ -135,6 +141,39 @@ async def arbitrate_discount_budget(
     if projected_pct > TOTAL_DISCOUNT_CAP_PCT:
         return False, f"batch-wide discount cap would be exceeded ({projected_pct:.1f}% > {TOTAL_DISCOUNT_CAP_PCT}%)"
     return True, f"within discount budget ({projected_pct:.1f}% <= {TOTAL_DISCOUNT_CAP_PCT}%)"
+
+
+async def check_customer_suppression(session: AsyncSession, event: Event) -> tuple[bool, str]:
+    """A customer who has ignored repeated real contact attempts across past events, with
+    no recovery ever, shouldn't keep getting automated outreach - repeated unanswered
+    contact risks annoying someone into churning rather than recovering them (mirrors
+    Butter Payments' suppression logic). Suppressed customers route to human escalation
+    instead of another automated attempt. Returns (suppressed, reason)."""
+    if not event.customer_id:
+        return False, "no customer_id to evaluate"
+
+    past_outcomes = (
+        await session.execute(
+            select(Outcome)
+            .join(Event, Outcome.event_id == Event.id)
+            .where(Event.customer_id == event.customer_id, Event.id != event.id)
+        )
+    ).scalars().all()
+
+    if not past_outcomes:
+        return False, "no history for this customer"
+
+    if any(o.outcome in (OutcomeStatus.recovered.value, OutcomeStatus.unattributed_recovery.value) for o in past_outcomes):
+        return False, "customer has a successful recovery in their history"
+
+    failed_attempts = sum(1 for o in past_outcomes if o.outcome == OutcomeStatus.failed.value)
+    if failed_attempts >= SUPPRESSION_THRESHOLD:
+        return True, (
+            f"{failed_attempts} past contact attempts for this customer with no recovery ever - "
+            "suppressing further automated outreach"
+        )
+
+    return False, f"only {failed_attempts} past failed attempts, below suppression threshold ({SUPPRESSION_THRESHOLD})"
 
 
 async def arbitrate_escalation_slot(session: AsyncSession) -> tuple[bool, str]:
