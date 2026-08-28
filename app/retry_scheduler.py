@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from app.agents.guardrail import BOUNDS, logical_delta
+from app.agents.learner import record_attempt_failure
 from app.bus import publish
 from app.db import async_session
 from app.models import AuditLog, Decision, Event
@@ -23,10 +24,11 @@ async def retry_scheduler_loop() -> None:
 
 async def requeue_ready_events() -> None:
     """Events sit in "executed" status after an attempt until either an outcome webhook
-    resolves them (Learner, not built yet) or their cooldown elapses - at which point
-    Guardrail's own max_attempts/escalation logic (already in decision_worker) should get
-    another chance to run. This is the clock tick that drives that: re-triage events whose
-    logical cooldown has passed so decision_worker sees them again."""
+    resolves them (app.agents.learner.handle_recovery_webhook) or their cooldown elapses -
+    at which point the attempt is scored a failure and Guardrail's own max_attempts/
+    escalation logic (already in decision_worker) should get another chance to run. This
+    is the clock tick that drives that: re-triage events whose logical cooldown has
+    passed so decision_worker sees them again."""
     ready_ids: list[int] = []
 
     async with async_session() as session:
@@ -47,6 +49,8 @@ async def requeue_ready_events() -> None:
             bounds = BOUNDS[EventType(event.event_type)]
             if datetime.now(UTC) - last_decision.created_at < logical_delta(bounds["cooldown_hours"]):
                 continue
+
+            await record_attempt_failure(session, event, last_decision)
 
             event.status = "triaged"
             session.add(

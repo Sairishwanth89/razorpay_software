@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from app.agents.detector import normalize_webhook
+from app.agents.learner import RECOVERY_WEBHOOK_EVENTS, handle_recovery_webhook
 from app.config import settings
 from app.db import async_session
 from app.ingest import ingest_event
@@ -47,8 +48,12 @@ async def razorpay_webhook(
         )
         await session.commit()
 
-        at_risk_event = normalize_webhook(event_name, payload)
-        if at_risk_event is not None:
-            await ingest_event(session, at_risk_event, x_razorpay_event_id)
+        if event_name in RECOVERY_WEBHOOK_EVENTS:
+            await handle_recovery_webhook(session, event_name, payload)
+            await session.commit()
+        else:
+            at_risk_event = normalize_webhook(event_name, payload)
+            if at_risk_event is not None:
+                await ingest_event(session, at_risk_event, x_razorpay_event_id)
 
     return {"status": "ok"}

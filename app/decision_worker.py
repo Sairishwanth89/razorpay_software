@@ -10,6 +10,7 @@ from app.agents.guardrail import (
     has_concurrent_intervention,
     validate_proposal,
 )
+from app.agents.learner import record_terminal_outcome
 from app.agents.strategist import propose_intervention
 from app.bus import consume, publish
 from app.db import async_session
@@ -57,6 +58,9 @@ async def process_event(event_id: int) -> None:
                 return
             event.status = outcome
             session.add(_audit(event.id, "guardrail", f"closed:{outcome}", {"reason": reason}))
+            await record_terminal_outcome(
+                session, event, prior_decisions[-1].id if prior_decisions else None, outcome
+            )
             await session.commit()
             return
 
@@ -116,4 +120,5 @@ async def process_event(event_id: int) -> None:
         session.add(
             _audit(event.id, "guardrail", "closed:escalated", {"reason": "2 consecutive rejected proposals"})
         )
+        await record_terminal_outcome(session, event, decision.id if decision else None, "escalated")
         await session.commit()

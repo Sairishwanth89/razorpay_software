@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, ForeignKey, String
+from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -72,6 +72,21 @@ class Outcome(Base):
     resolved_at: Mapped[datetime]
 
     event: Mapped["Event"] = relationship(back_populates="outcomes")
+
+
+class LearnerArm(Base):
+    __tablename__ = "learner_arms"
+    __table_args__ = (
+        UniqueConstraint("failure_reason", "intervention_type", "amount_bracket", name="uq_learner_arm"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    failure_reason: Mapped[str] = mapped_column(String)
+    intervention_type: Mapped[str] = mapped_column(String)
+    amount_bracket: Mapped[str] = mapped_column(String)
+    successes: Mapped[int] = mapped_column(default=0)
+    failures: Mapped[int] = mapped_column(default=0)
+    updated_at: Mapped[datetime]
 
 
 class AuditLog(Base):
