@@ -7,7 +7,7 @@ from app.config import settings
 from app.models import Event
 from app.schemas import EventType, InterventionType, StrategistProposal
 
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+openai_client = AsyncOpenAI(api_key=settings.openai_api_key, timeout=30.0, max_retries=1)
 
 STRATEGIST_MODEL = "gpt-4o-mini"
 

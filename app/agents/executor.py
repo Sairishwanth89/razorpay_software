@@ -10,6 +10,14 @@ from app.schemas import EventType, InterventionType
 # Razorpay enforces this against actual wall-clock time regardless of our internal pacing.
 PAYMENT_LINK_EXPIRY_HOURS = 48
 
+RAZORPAY_CALL_TIMEOUT_SECONDS = 20
+
+
+async def _call_with_timeout(fn, *args):
+    """The Razorpay SDK has no configurable request timeout, and this runs on the
+    single-consumer executor_loop - an unbounded hang here stalls the entire batch."""
+    return await asyncio.wait_for(asyncio.to_thread(fn, *args), timeout=RAZORPAY_CALL_TIMEOUT_SECONDS)
+
 
 @dataclass
 class ExecutionResult:
@@ -47,7 +55,7 @@ async def _create_payment_link(event: Event, decision: Decision, discount_pct: f
         },
     }
     try:
-        link = await asyncio.to_thread(client.payment_link.create, data)
+        link = await _call_with_timeout(client.payment_link.create, data)
         return ExecutionResult(
             action_type=f"payment_link_created:{decision.intervention_type}",
             status="sent",
@@ -85,7 +93,7 @@ def _simulate_nudge(event: Event, decision: Decision) -> ExecutionResult:
 
 async def _resend_invoice(event: Event, decision: Decision) -> ExecutionResult:
     try:
-        result = await asyncio.to_thread(client.invoice.notify_by, event.razorpay_entity_id, "email")
+        result = await _call_with_timeout(client.invoice.notify_by, event.razorpay_entity_id, "email")
         return ExecutionResult(
             action_type="invoice_notification_resent",
             status="sent" if result.get("success") else "failed",
@@ -107,7 +115,7 @@ async def _resend_subscription_invoice(event: Event, decision: Decision) -> Exec
     """Razorpay has no "force charge" API for a halted subscription without the customer
     present - manual recovery means resending the existing unpaid invoice/payment-update link."""
     try:
-        invoices = await asyncio.to_thread(
+        invoices = await _call_with_timeout(
             client.invoice.all, {"subscription_id": event.razorpay_entity_id, "count": 5}
         )
         pending = [
@@ -122,7 +130,7 @@ async def _resend_subscription_invoice(event: Event, decision: Decision) -> Exec
                 after_state={"error": "no pending invoice found for this subscription"},
             )
         invoice = pending[0]
-        result = await asyncio.to_thread(client.invoice.notify_by, invoice["id"], "email")
+        result = await _call_with_timeout(client.invoice.notify_by, invoice["id"], "email")
         return ExecutionResult(
             action_type="manual_charge_invoice_resent",
             status="sent" if result.get("success") else "failed",

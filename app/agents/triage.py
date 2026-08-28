@@ -5,7 +5,7 @@ from openai import AsyncOpenAI
 from app.config import settings
 from app.schemas import TriageCategory
 
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+openai_client = AsyncOpenAI(api_key=settings.openai_api_key, timeout=30.0, max_retries=1)
 
 CLASSIFICATION_MODEL = "gpt-4o-mini"
 

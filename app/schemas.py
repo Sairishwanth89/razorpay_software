@@ -42,6 +42,7 @@ class OutcomeStatus(StrEnum):
     unattributed_recovery = "unattributed_recovery"
     escalated = "escalated"
     unresolved = "unresolved"
+    superseded = "superseded"
 
 
 class StrategistProposal(BaseModel):
@@ -49,6 +50,11 @@ class StrategistProposal(BaseModel):
     reasoning: str
     discount_pct: float | None = None
     draft_message: str | None = None
+
+
+class CriticVerdict(BaseModel):
+    grounded: bool
+    issue: str | None = None
 
 
 class RevenueAtRiskEvent(BaseModel):

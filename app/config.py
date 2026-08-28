@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 
@@ -30,3 +32,18 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def logical_delta(hours: float) -> timedelta:
+    """Convert a "logical hours" duration (Guardrail cooldowns, the abandoned-checkout
+    detection threshold, etc.) into a real timedelta, scaled per settings so a multi-day
+    batch can replay inside one live demo session."""
+    return timedelta(seconds=hours * settings.time_scale_seconds_per_hour)
+
+
+def ensure_utc(value: datetime) -> datetime:
+    """SQLite has no native timezone-aware datetime type - values written as tz-aware
+    (everything in this codebase uses datetime.now(UTC)) round-trip back from the DB as
+    naive datetimes, which raises TypeError against a fresh datetime.now(UTC) subtraction.
+    Call this on any DB-loaded datetime before arithmetic against datetime.now(UTC)."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)

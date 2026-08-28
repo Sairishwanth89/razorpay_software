@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app.config import ensure_utc, logical_delta
 from app.models import Decision, Event
 from app.razorpay_client import client
 from app.schemas import EventType, GuardrailVerdict, InterventionType, StrategistProposal
@@ -73,14 +73,7 @@ ALLOWED_INTERVENTIONS = {
 }
 
 MAX_CONSECUTIVE_REJECTIONS = 2
-TOTAL_DISCOUNT_CAP_PCT = 3
 RESOLVED_LIVE_STATUSES = {"paid", "captured", "active", "completed", "cancelled"}
-
-
-def logical_delta(hours: float) -> timedelta:
-    """Convert a "logical hours" bound into a real timedelta, scaled per settings
-    so a multi-day batch can replay inside one live demo session."""
-    return timedelta(seconds=hours * settings.time_scale_seconds_per_hour)
 
 
 def check_preflight(event: Event, attempt_number: int, last_decision_at: datetime | None):
@@ -97,25 +90,10 @@ def check_preflight(event: Event, attempt_number: int, last_decision_at: datetim
 
     if last_decision_at is not None:
         cooldown = logical_delta(bounds["cooldown_hours"])
-        if datetime.now(UTC) - last_decision_at < cooldown:
+        if datetime.now(UTC) - ensure_utc(last_decision_at) < cooldown:
             return "cooldown", "cooldown window has not elapsed since the last attempt"
 
     return None
-
-
-async def has_concurrent_intervention(session: AsyncSession, event: Event) -> bool:
-    if not event.customer_id:
-        return False
-    other_open = (
-        await session.execute(
-            select(Event).where(
-                Event.customer_id == event.customer_id,
-                Event.id != event.id,
-                Event.status == "decided",
-            )
-        )
-    ).scalars().all()
-    return len(other_open) > 0
 
 
 async def compute_discount_totals(session: AsyncSession) -> tuple[float, float]:
@@ -138,6 +116,16 @@ async def compute_discount_totals(session: AsyncSession) -> tuple[float, float]:
     return total_discount_used, total_at_risk
 
 
+RAZORPAY_CALL_TIMEOUT_SECONDS = 20
+
+
+async def _fetch_with_timeout(fn, *args):
+    """The Razorpay SDK has no configurable request timeout, and this call runs on the
+    single-consumer decision_loop - an unbounded hang here stalls the entire batch, not
+    just one event."""
+    return await asyncio.wait_for(asyncio.to_thread(fn, *args), timeout=RAZORPAY_CALL_TIMEOUT_SECONDS)
+
+
 async def fetch_live_status(event: Event) -> str | None:
     event_type = event.event_type
     if event_type == EventType.payment_failed.value:
@@ -146,16 +134,16 @@ async def fetch_live_status(event: Event) -> str | None:
         )
         if not order_id:
             return None
-        order = await asyncio.to_thread(client.order.fetch, order_id)
+        order = await _fetch_with_timeout(client.order.fetch, order_id)
         return order.get("status")
     if event_type == EventType.checkout_abandoned.value:
-        order = await asyncio.to_thread(client.order.fetch, event.razorpay_entity_id)
+        order = await _fetch_with_timeout(client.order.fetch, event.razorpay_entity_id)
         return order.get("status")
     if event_type == EventType.invoice_overdue.value:
-        invoice = await asyncio.to_thread(client.invoice.fetch, event.razorpay_entity_id)
+        invoice = await _fetch_with_timeout(client.invoice.fetch, event.razorpay_entity_id)
         return invoice.get("status")
     if event_type == EventType.subscription_halted.value:
-        subscription = await asyncio.to_thread(client.subscription.fetch, event.razorpay_entity_id)
+        subscription = await _fetch_with_timeout(client.subscription.fetch, event.razorpay_entity_id)
         return subscription.get("status")
     return None
 
@@ -164,9 +152,10 @@ async def validate_proposal(
     event: Event,
     proposal: StrategistProposal,
     attempt_number: int,
-    total_discount_used: float,
-    total_at_risk: float,
 ) -> tuple[GuardrailVerdict, str]:
+    """Purely deterministic, per-event bounds - shared/scarce-resource arbitration
+    (concurrent intervention slots, the batch-wide discount budget, escalation slots)
+    is the Orchestrator's job (app.agents.orchestrator), called before this."""
     bounds = BOUNDS[EventType(event.event_type)]
     allowed = ALLOWED_INTERVENTIONS[EventType(event.event_type)]
 
@@ -181,11 +170,6 @@ async def validate_proposal(
             return GuardrailVerdict.rejected, "amount exceeds discount-eligible ceiling"
         if proposal.discount_pct is None or proposal.discount_pct > bounds["discount_max_pct"]:
             return GuardrailVerdict.rejected, "discount percentage exceeds cap"
-        proposed_amount = event.amount * proposal.discount_pct / 100
-        if total_at_risk > 0:
-            projected_pct = (total_discount_used + proposed_amount) / total_at_risk * 100
-            if projected_pct > TOTAL_DISCOUNT_CAP_PCT:
-                return GuardrailVerdict.rejected, "batch-wide discount cap would be exceeded"
 
     live_status = await fetch_live_status(event)
     if live_status in RESOLVED_LIVE_STATUSES:

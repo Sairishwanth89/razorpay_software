@@ -3,9 +3,11 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from app.agents.guardrail import BOUNDS, logical_delta
+from app.agents.guardrail import BOUNDS
 from app.agents.learner import record_attempt_failure
 from app.bus import publish
+from app.channel_agent import channel_topic
+from app.config import ensure_utc, logical_delta
 from app.db import async_session
 from app.models import AuditLog, Decision, Event
 from app.schemas import EventType
@@ -17,8 +19,18 @@ async def retry_scheduler_loop() -> None:
     while True:
         try:
             await requeue_ready_events()
-        except Exception:
-            pass
+        except Exception as exc:
+            async with async_session() as session:
+                session.add(
+                    AuditLog(
+                        event_id=None,
+                        actor="scheduler",
+                        action="processing_error",
+                        detail={"error": str(exc)},
+                        created_at=datetime.now(UTC),
+                    )
+                )
+                await session.commit()
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
 
@@ -26,10 +38,10 @@ async def requeue_ready_events() -> None:
     """Events sit in "executed" status after an attempt until either an outcome webhook
     resolves them (app.agents.learner.handle_recovery_webhook) or their cooldown elapses -
     at which point the attempt is scored a failure and Guardrail's own max_attempts/
-    escalation logic (already in decision_worker) should get another chance to run. This
-    is the clock tick that drives that: re-triage events whose logical cooldown has
-    passed so decision_worker sees them again."""
-    ready_ids: list[int] = []
+    escalation logic (already in app.channel_agent) should get another chance to run.
+    This is the clock tick that drives that: requeue events whose logical cooldown has
+    passed back onto their own channel's topic."""
+    ready: list[tuple[int, str]] = []
 
     async with async_session() as session:
         events = (await session.execute(select(Event).where(Event.status == "executed"))).scalars().all()
@@ -47,7 +59,7 @@ async def requeue_ready_events() -> None:
                 continue
 
             bounds = BOUNDS[EventType(event.event_type)]
-            if datetime.now(UTC) - last_decision.created_at < logical_delta(bounds["cooldown_hours"]):
+            if datetime.now(UTC) - ensure_utc(last_decision.created_at) < logical_delta(bounds["cooldown_hours"]):
                 continue
 
             await record_attempt_failure(session, event, last_decision)
@@ -62,9 +74,9 @@ async def requeue_ready_events() -> None:
                     created_at=datetime.now(UTC),
                 )
             )
-            ready_ids.append(event.id)
+            ready.append((event.id, event.event_type))
 
         await session.commit()
 
-    for event_id in ready_ids:
-        await publish("strategist", event_id)
+    for event_id, event_type in ready:
+        await publish(channel_topic(event_type), event_id)

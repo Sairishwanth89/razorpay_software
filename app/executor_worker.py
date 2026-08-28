@@ -36,6 +36,23 @@ async def process_decision(decision_id: int) -> None:
         if event is None:
             return
 
+        if event.status != "decided":
+            # The Orchestrator can preempt an approved-but-not-yet-executed claim in favor
+            # of a higher-expected-value challenger (app.agents.orchestrator), flipping the
+            # event to "superseded" - this is the check that actually stops the preempted
+            # action from firing.
+            session.add(
+                AuditLog(
+                    event_id=event.id,
+                    actor="executor",
+                    action="skipped_superseded",
+                    detail={"decision_id": decision.id, "event_status": event.status},
+                    created_at=datetime.now(UTC),
+                )
+            )
+            await session.commit()
+            return
+
         result = await execute_intervention(event, decision)
 
         session.add(

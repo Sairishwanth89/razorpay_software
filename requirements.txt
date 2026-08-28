@@ -8,3 +8,5 @@ openai
 httpx
 pytest
 pytest-asyncio
+streamlit
+pandas

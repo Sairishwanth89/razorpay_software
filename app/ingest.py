@@ -4,9 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bus import publish
+from app.channel_agent import channel_topic
 from app.models import AuditLog, Event
 from app.schemas import RevenueAtRiskEvent
-
 
 async def ingest_event(
     session: AsyncSession,
@@ -18,11 +18,18 @@ async def ingest_event(
             select(Event).where(Event.razorpay_event_id == razorpay_event_id)
         )
     else:
+        # Poller-sourced events (checkout_abandoned) have no Razorpay webhook ID to
+        # dedupe on, and the entity is a specific order the poller re-scans every cycle
+        # forever until it's paid. Once Detector has made ANY call on that exact order -
+        # in flight or already closed out (recovered/escalated/unresolved) - it must never
+        # be re-flagged as a fresh abandonment; the order sitting unpaid is not new
+        # information. Unlike webhook-sourced events, a resolved status here does NOT mean
+        # "safe to re-open" - only a real Razorpay entity_id can create a legitimately new
+        # poller-sourced event (e.g. a customer's later, separate order).
         duplicate = await session.scalar(
             select(Event).where(
                 Event.razorpay_entity_id == event.razorpay_entity_id,
                 Event.event_type == event.event_type.value,
-                Event.status == "open",
             )
         )
     if duplicate is not None:
@@ -53,5 +60,5 @@ async def ingest_event(
         )
     )
     await session.commit()
-    await publish("triage", db_event.id)
+    await publish(channel_topic(event.event_type), db_event.id)
     return True

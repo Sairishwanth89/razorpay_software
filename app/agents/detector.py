@@ -1,5 +1,6 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
+from app.config import logical_delta
 from app.razorpay_client import client
 from app.schemas import EventType, RevenueAtRiskEvent
 
@@ -9,7 +10,7 @@ ACTIONABLE_WEBHOOK_EVENTS = {
     "invoice.expired": EventType.invoice_overdue,
 }
 
-ABANDONMENT_THRESHOLD_MINUTES = 30
+ABANDONMENT_THRESHOLD_HOURS = 0.5
 
 
 def normalize_webhook(event_name: str, payload: dict) -> RevenueAtRiskEvent | None:
@@ -64,14 +65,14 @@ def normalize_webhook(event_name: str, payload: dict) -> RevenueAtRiskEvent | No
 
 
 def poll_abandoned_orders() -> list[RevenueAtRiskEvent]:
-    cutoff = datetime.now(UTC) - timedelta(minutes=ABANDONMENT_THRESHOLD_MINUTES)
+    cutoff = datetime.now(UTC) - logical_delta(ABANDONMENT_THRESHOLD_HOURS)
     orders = client.order.all({"count": 100})
 
     candidates = []
     for order in orders["items"]:
         if order.get("status") != "created":
             continue
-        if order.get("amount_paid", 0) > 0:
+        if (order.get("amount_paid") or 0) > 0:
             continue
         created_at = datetime.fromtimestamp(order["created_at"], tz=UTC)
         if created_at > cutoff:
