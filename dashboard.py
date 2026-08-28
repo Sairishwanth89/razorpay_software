@@ -50,7 +50,6 @@ THEMES = {
                         "guardrail": "#3fbf3f", "orchestrator": "#d95926", "executor": "#d55181", "learner": "#8a8a84",
                         "scheduler": "#8a8a84", "poller": "#8a8a84"},
         "sequential": ("#184f95", "#86b6ef"),  # dim -> bright reads as "more" on a dark surface
-        "console_surface": "#0a0a09",
     },
     "light": {
         "page_bg": "#f9f9f7",
@@ -61,7 +60,6 @@ THEMES = {
                         "guardrail": "#008300", "orchestrator": "#eb6834", "executor": "#e87ba4", "learner": "#767570",
                         "scheduler": "#767570", "poller": "#767570"},
         "sequential": ("#cde2fb", "#0d366b"),  # light -> dark reads as "more" on a light surface
-        "console_surface": "#111110",  # the log panel stays dark-styled in both modes (a terminal convention)
     },
 }
 
@@ -108,6 +106,12 @@ div[data-testid="stRadio"] label p {{ font-family: {MONO_STACK}; font-size: 13px
 .section-title {{ font-size: 18px; font-weight: 700; color: {T["ink_primary"]}; margin: 8px 0 3px 0; letter-spacing: 0.01em; }}
 .section-caption {{ font-family: {MONO_STACK}; font-size: 13px; color: {T["ink_muted"]}; margin-bottom: 14px; }}
 
+.attention-banner {{
+  display: flex; align-items: center; gap: 10px; background: #fab21918; border: 1px solid #fab21955;
+  border-radius: 8px; padding: 11px 16px; margin-bottom: 16px; font-family: {MONO_STACK}; font-size: 13.5px; color: {T["ink_primary"]};
+}}
+.attention-dot {{ width: 8px; height: 8px; border-radius: 50%; background: #fab219; flex-shrink: 0; }}
+.attention-banner b {{ color: #fab219; }}
 .agent-strip {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }}
 .agent-card {{ background: {T["surface"]}; border: 1px solid {T["border"]}; border-radius: 8px; padding: 14px 16px; }}
 .agent-card .top {{ display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }}
@@ -123,18 +127,18 @@ div[data-testid="stRadio"] label p {{ font-family: {MONO_STACK}; font-size: 13px
 .agent-stat b {{ color: {T["ink_secondary"]}; }}
 
 .console {{
-  background: {T["console_surface"]}; border: 1px solid {T["border"]}; border-radius: 8px;
+  background: {T["surface"]}; border: 1px solid {T["border"]}; border-radius: 8px;
   padding: 10px 4px; max-height: 460px; overflow-y: auto; font-family: {MONO_STACK}; font-size: 13.5px;
 }}
 .console-row {{ display: grid; grid-template-columns: 82px 20px 220px 200px 1fr; gap: 10px; padding: 5px 14px; border-radius: 4px; align-items: baseline; }}
 .console-row:hover {{ background: rgba(128,128,128,0.08); }}
-.console-time {{ color: #8a8a84; }}
+.console-time {{ color: {T["ink_muted"]}; }}
 .console-dot-wrap {{ display: flex; align-items: center; height: 100%; }}
 .console-dot {{ width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }}
-.console-agent {{ color: #c3c2b7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-.console-action {{ color: #ffffff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-.console-detail {{ color: #c3c2b7; overflow-wrap: anywhere; }}
-.console-empty {{ color: #8a8a84; padding: 16px; }}
+.console-agent {{ color: {T["ink_secondary"]}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.console-action {{ color: {T["ink_primary"]}; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+.console-detail {{ color: {T["ink_secondary"]}; overflow-wrap: anywhere; }}
+.console-empty {{ color: {T["ink_muted"]}; padding: 16px; }}
 </style>
 """,
     unsafe_allow_html=True,
@@ -254,6 +258,18 @@ for channel_key, label in CHANNEL_LABELS.items():
     )
 strip_html.append("</div>")
 st.markdown("".join(strip_html), unsafe_allow_html=True)
+
+# ---- Human-in-the-loop attention banner ----
+escalated_events = events[events["status"] == "escalated"]
+if not escalated_events.empty:
+    escalated_value = escalated_events["amount"].fillna(0).sum()
+    st.markdown(
+        f'<div class="attention-banner"><div class="attention-dot"></div>'
+        f'<div><b>{len(escalated_events)} case{"s" if len(escalated_events) != 1 else ""} need human review</b> — '
+        f'guardrail bounds exhausted, ₹{escalated_value / 100:,.0f} at risk sitting with a human decision. '
+        f'See the exception list below.</div></div>',
+        unsafe_allow_html=True,
+    )
 
 # ---- Headline hero figure ----
 total_at_risk = events["amount"].fillna(0).sum()

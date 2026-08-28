@@ -13,8 +13,10 @@ AMOUNT_PLAN = (
 )
 
 # Real invoices, left unpaid with a short real expire_by so Razorpay itself expires them
-# and fires a genuine invoice.expired webhook - no staged JSON, no browser needed.
-EXPIRE_IN_SECONDS = 90
+# and fires a genuine invoice.expired webhook - no staged JSON, no browser needed. Razorpay
+# enforces a 15-minute minimum on expire_by (a real external constraint, not one we can
+# compress the way we do our own internal cooldowns) - 16 min gives a small safety margin.
+EXPIRE_IN_SECONDS = 960
 
 SCRIPTS_DIR = Path(__file__).parent
 
@@ -38,7 +40,7 @@ def build():
         )
         invoices.append({"invoice_id": invoice["id"], "amount": amount, "index": i})
         print(f"[{i + 1}/{len(AMOUNT_PLAN)}] created invoice {invoice['id']} for INR {amount / 100:.2f}, expires in {EXPIRE_IN_SECONDS}s")
-        time.sleep(0.5)
+        time.sleep(2.5)
 
     (SCRIPTS_DIR / "overdue_invoices.json").write_text(json.dumps(invoices, indent=2), encoding="utf-8")
     print(f"\n{len(invoices)} invoices created, left unpaid. They'll expire for real in ~{EXPIRE_IN_SECONDS}s.")

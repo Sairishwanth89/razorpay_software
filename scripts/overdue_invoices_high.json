@@ -1,0 +1,30 @@
+[
+  {
+    "invoice_id": "inv_TVFaMCNuXAc6mG",
+    "amount": 1500000
+  },
+  {
+    "invoice_id": "inv_TVFaRKGh2NG8tv",
+    "amount": 2200000
+  },
+  {
+    "invoice_id": "inv_TVFaWOoS159Y8t",
+    "amount": 2900000
+  },
+  {
+    "invoice_id": "inv_TVFabVqJjCvftC",
+    "amount": 3600000
+  },
+  {
+    "invoice_id": "inv_TVFagq5kIvoVkY",
+    "amount": 6000000
+  },
+  {
+    "invoice_id": "inv_TVFbTs60Kq9tSb",
+    "amount": 9000000
+  },
+  {
+    "invoice_id": "inv_TVFbZ3fIiHvebZ",
+    "amount": 12000000
+  }
+]
