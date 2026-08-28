@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+razorpay
+sqlalchemy>=2.0
+aiosqlite
+pydantic-settings
+openai
+httpx
+pytest
+pytest-asyncio

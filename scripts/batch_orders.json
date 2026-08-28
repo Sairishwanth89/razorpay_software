@@ -1,0 +1,74 @@
+[
+  {
+    "name": "payment_timed_out",
+    "error_code": "payment_timed_out",
+    "description": "Payment could not be completed due to a temporary issue",
+    "card": "4100280000090000",
+    "amount": 45000,
+    "order_id": "order_TUsBUj97dLan5s",
+    "index": 0
+  },
+  {
+    "name": "insufficient_fund",
+    "error_code": "insufficient_fund",
+    "description": "Payment could not be completed due to insufficient account balance",
+    "card": "4100280000080001",
+    "amount": 120000,
+    "order_id": "order_TUsBW7TtKpg9Oh",
+    "index": 1
+  },
+  {
+    "name": "payment_cancelled",
+    "error_code": "payment_cancelled",
+    "description": "Payment has been cancelled",
+    "card": "4100280000070002",
+    "amount": 350000,
+    "order_id": "order_TUsBXU63HX62U3",
+    "index": 2
+  },
+  {
+    "name": "card_declined",
+    "error_code": "card_declined",
+    "description": "Payment did not go through as it was declined by the bank",
+    "card": "4100280000060003",
+    "amount": 499900,
+    "order_id": "order_TUsBYrp8rr0vLI",
+    "index": 3
+  },
+  {
+    "name": "card_disabled_for_online_payments",
+    "error_code": "card_disabled_for_online_payments",
+    "description": "Card is disabled for online payments",
+    "card": "4100280000030006",
+    "amount": 875000,
+    "order_id": "order_TUsBaKC8lofvIg",
+    "index": 4
+  },
+  {
+    "name": "card_number_invalid",
+    "error_code": "card_number_invalid",
+    "description": "Incorrect card number entered",
+    "card": "4100280000010008",
+    "amount": 1500000,
+    "order_id": "order_TUsBbjV6mPOc1J",
+    "index": 5
+  },
+  {
+    "name": "gateway_technical_error",
+    "error_code": "gateway_technical_error",
+    "description": "Payment did not go through due to a temporary gateway issue",
+    "card": "4100280000020007",
+    "amount": 2200000,
+    "order_id": "order_TUsBd84YVyQJIF",
+    "index": 6
+  },
+  {
+    "name": "authentication_failed",
+    "error_code": "authentication_failed",
+    "description": "Payment could not be completed due to incorrect OTP or verification details",
+    "card": "4100280000000009",
+    "amount": 3150000,
+    "order_id": "order_TUsBeUTn96R2Ls",
+    "index": 7
+  }
+]

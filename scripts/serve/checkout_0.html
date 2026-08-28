@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>payment_timed_out</title>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    .banner { background: #f4f1ea; border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+    .field { font-family: monospace; font-size: 18px; background: #fff; border: 1px solid #ccc;
+             border-radius: 4px; padding: 6px 10px; display: inline-block; margin: 4px 8px 4px 0; cursor: pointer; }
+    button { font-size: 16px; padding: 10px 24px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h2>payment_timed_out</h2>
+  <p>Expected error: <code>payment_timed_out</code> — Payment could not be completed due to a temporary issue</p>
+  <div class="banner">
+    <div>Card number (click to copy): <span class="field" onclick="copyText('4100280000090000', this)">4100280000090000</span></div>
+    <div>Expiry: <span class="field">12 / 30</span> &nbsp; CVV: <span class="field">123</span></div>
+    <div>Mobile (click to copy): <span class="field" onclick="copyText('8123456789', this)">8123456789</span></div>
+    <div>Then submit any OTP with 4+ digits when asked.</div>
+  </div>
+  <button id="pay-btn">Open Checkout</button>
+  <p id="result" style="font-weight: bold;"></p>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    function copyText(text, el) {
+      navigator.clipboard.writeText(text);
+      var original = el.textContent;
+      el.textContent = "copied!";
+      setTimeout(function () { el.textContent = original; }, 800);
+    }
+    var options = {
+      "key": "rzp_test_TUkUPZ7n0JyWtH",
+      "amount": "45000",
+      "currency": "INR",
+      "order_id": "order_TUsBUj97dLan5s",
+      "name": "Test Merchant",
+      "description": "payment_timed_out",
+      "handler": function (response) {
+        document.title = "PAYMENT_SUCCESS:" + response.razorpay_payment_id;
+        document.getElementById("result").textContent = "SUCCESS: " + response.razorpay_payment_id;
+      },
+      "modal": {
+        "ondismiss": function () {
+          document.title = "PAYMENT_DISMISSED";
+        }
+      },
+      "prefill": { "name": "Test User", "email": "test@example.com" }
+    };
+    var rzp1 = new Razorpay(options);
+    rzp1.on('payment.failed', function (response) {
+      document.title = "PAYMENT_FAILED:" + response.error.code;
+      document.getElementById("result").textContent = "FAILED: " + response.error.code + " - " + response.error.description;
+    });
+    document.getElementById('pay-btn').onclick = function (e) {
+      rzp1.open();
+      e.preventDefault();
+    }
+  </script>
+</body>
+</html>

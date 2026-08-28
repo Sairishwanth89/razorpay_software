@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Test Batch</title>
+<style>
+body { font-family: sans-serif; max-width: 800px; margin: 40px auto; }
+table { border-collapse: collapse; width: 100%; }
+td, th { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
+</style></head>
+<body>
+<h2>Revenue Recovery Test Batch — 8 scenarios</h2>
+<p>Click "Open" for each row, complete the checkout with the pre-filled card details shown on that page.
+Each one fires a real payment.failed webhook to the local receiver.</p>
+<table>
+<tr><th>Scenario</th><th>Error code</th><th>Amount</th><th>Order ID</th><th></th></tr>
+<tr><td>payment_timed_out</td><td>payment_timed_out</td><td>₹450.00</td><td>order_TUsBUj97dLan5s</td><td><a href='checkout_0.html' target='_blank'>Open &rarr;</a></td></tr>
+<tr><td>insufficient_fund</td><td>insufficient_fund</td><td>₹1200.00</td><td>order_TUsBW7TtKpg9Oh</td><td><a href='checkout_1.html' target='_blank'>Open &rarr;</a></td></tr>
+<tr><td>payment_cancelled</td><td>payment_cancelled</td><td>₹3500.00</td><td>order_TUsBXU63HX62U3</td><td><a href='checkout_2.html' target='_blank'>Open &rarr;</a></td></tr>
+<tr><td>card_declined</td><td>card_declined</td><td>₹4999.00</td><td>order_TUsBYrp8rr0vLI</td><td><a href='checkout_3.html' target='_blank'>Open &rarr;</a></td></tr>
+<tr><td>card_disabled_for_online_payments</td><td>card_disabled_for_online_payments</td><td>₹8750.00</td><td>order_TUsBaKC8lofvIg</td><td><a href='checkout_4.html' target='_blank'>Open &rarr;</a></td></tr>
+<tr><td>card_number_invalid</td><td>card_number_invalid</td><td>₹15000.00</td><td>order_TUsBbjV6mPOc1J</td><td><a href='checkout_5.html' target='_blank'>Open &rarr;</a></td></tr>
+<tr><td>gateway_technical_error</td><td>gateway_technical_error</td><td>₹22000.00</td><td>order_TUsBd84YVyQJIF</td><td><a href='checkout_6.html' target='_blank'>Open &rarr;</a></td></tr>
+<tr><td>authentication_failed</td><td>authentication_failed</td><td>₹31500.00</td><td>order_TUsBeUTn96R2Ls</td><td><a href='checkout_7.html' target='_blank'>Open &rarr;</a></td></tr>
+</table>
+</body></html>
