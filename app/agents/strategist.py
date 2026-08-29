@@ -25,6 +25,12 @@ Rules:
   suitable for SMS/WhatsApp to an Indian customer. Keep it under 300 characters. Do not include links.
 - If a prior proposal for this event was rejected, do not repeat the same rejected intervention_type.
 - If nothing reasonable can be done, propose "escalate".
+- You are given this customer's customer_trust label, built only from their own real past outcomes on
+  other events: "new" (no history yet), "reliable" (recovered more often than not), "mixed", or "at_risk"
+  (failed to recover more often than not). Use it only to calibrate tone, never to invent facts you weren't
+  given: "reliable" can get a lighter, friendlier nudge; "at_risk" should get a neutral, factual tone with
+  no over-promising and no stacking a discount on top of a repeated non-payment history; "new" and "mixed"
+  get your default neutral tone.
 
 Respond as strict JSON:
 {"intervention_type": "...", "reasoning": "one or two sentences", "discount_pct": null or a number, "draft_message": null or "..."}
@@ -32,7 +38,7 @@ Respond as strict JSON:
 
 
 async def propose_intervention(
-    event: Event, attempt_number: int, prior_intervention_types: list[str]
+    event: Event, attempt_number: int, prior_intervention_types: list[str], customer_trust: str = "new"
 ) -> StrategistProposal:
     allowed = [i.value for i in ALLOWED_INTERVENTIONS[EventType(event.event_type)]]
     user_content = {
@@ -44,6 +50,7 @@ async def propose_intervention(
         "attempt_number": attempt_number,
         "allowed_interventions": allowed,
         "prior_intervention_types_this_event": prior_intervention_types,
+        "customer_trust": customer_trust,
     }
 
     response = await openai_client.chat.completions.create(

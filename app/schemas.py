@@ -54,6 +54,7 @@ class StrategistProposal(BaseModel):
 
 class CriticVerdict(BaseModel):
     grounded: bool
+    compliant: bool = True
     rationale: str
 
 

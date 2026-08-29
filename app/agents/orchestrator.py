@@ -176,6 +176,41 @@ async def check_customer_suppression(session: AsyncSession, event: Event) -> tup
     return False, f"only {failed_attempts} past failed attempts, below suppression threshold ({SUPPRESSION_THRESHOLD})"
 
 
+def _trust_label(score: float, sample_size: int) -> str:
+    if sample_size == 0:
+        return "new"
+    if score >= 0.66:
+        return "reliable"
+    if score <= 0.33:
+        return "at_risk"
+    return "mixed"
+
+
+async def customer_trust_score(session: AsyncSession, event: Event) -> tuple[float, str, dict]:
+    """Real per-customer signal built only from this customer's own resolved outcomes on
+    OTHER events - the same data check_customer_suppression already queries, reframed as a
+    continuous score instead of a hard cutoff. Silent (the neutral "new" prior) until a
+    customer has real resolved history; never inferred from anything but actual outcomes."""
+    if not event.customer_id:
+        return DEFAULT_SUCCESS_RATE_PRIOR, "new", {"recovered": 0, "failed": 0}
+
+    past_outcomes = (
+        await session.execute(
+            select(Outcome)
+            .join(Event, Outcome.event_id == Event.id)
+            .where(Event.customer_id == event.customer_id, Event.id != event.id)
+        )
+    ).scalars().all()
+
+    recovered = sum(
+        1 for o in past_outcomes if o.outcome in (OutcomeStatus.recovered.value, OutcomeStatus.unattributed_recovery.value)
+    )
+    failed = sum(1 for o in past_outcomes if o.outcome == OutcomeStatus.failed.value)
+    sample_size = recovered + failed
+    score = DEFAULT_SUCCESS_RATE_PRIOR if sample_size == 0 else recovered / sample_size
+    return score, _trust_label(score, sample_size), {"recovered": recovered, "failed": failed}
+
+
 async def arbitrate_escalation_slot(session: AsyncSession) -> tuple[bool, str]:
     open_escalations = (await session.execute(select(Event).where(Event.status == "escalated"))).scalars().all()
     if len(open_escalations) >= MAX_CONCURRENT_ESCALATIONS:

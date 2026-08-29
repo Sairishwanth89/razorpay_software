@@ -16,6 +16,7 @@ from app.agents.orchestrator import (
     arbitrate_discount_budget,
     arbitrate_escalation_slot,
     check_customer_suppression,
+    customer_trust_score,
     expected_value,
 )
 from app.agents.strategist import propose_intervention
@@ -136,6 +137,22 @@ async def process_event(event_id: int, channel_name: str) -> None:
             await session.commit()
             return
 
+        trust_score, trust_label, trust_detail = await customer_trust_score(session, event)
+        session.add(
+            _audit(
+                event.id,
+                "orchestrator",
+                f"trust_score:{trust_label}",
+                {
+                    "reasoning": (
+                        f"customer trust: {trust_label} "
+                        f"({trust_detail['recovered']} recovered / {trust_detail['failed']} failed past contacts)"
+                    ),
+                    "score": round(trust_score, 2),
+                },
+            )
+        )
+
         prior_types = [d.intervention_type for d in prior_decisions]
         proposal = None
         verdict = None
@@ -143,21 +160,21 @@ async def process_event(event_id: int, channel_name: str) -> None:
         decision = None
 
         for _ in range(MAX_CONSECUTIVE_REJECTIONS):
-            proposal = await propose_intervention(event, attempt_number, prior_types)
+            proposal = await propose_intervention(event, attempt_number, prior_types, customer_trust=trust_label)
 
             critic_verdict = await verify_proposal(event, proposal, attempt_number, prior_types)
-            session.add(
-                _audit(
-                    event.id,
-                    "critic",
-                    "verified" if critic_verdict.grounded else "flagged",
-                    {"rationale": critic_verdict.rationale},
-                )
-            )
+            if critic_verdict.grounded and critic_verdict.compliant:
+                critic_action = "verified"
+            elif not critic_verdict.grounded:
+                critic_action = "flagged:ungrounded"
+            else:
+                critic_action = "flagged:noncompliant"
+            session.add(_audit(event.id, "critic", critic_action, {"rationale": critic_verdict.rationale}))
 
-            if not critic_verdict.grounded:
+            if not critic_verdict.grounded or not critic_verdict.compliant:
                 verdict = GuardrailVerdict.rejected
-                reason = f"critic: {critic_verdict.rationale}"
+                failure_kind = "grounding" if not critic_verdict.grounded else "tone/compliance"
+                reason = f"critic ({failure_kind}): {critic_verdict.rationale}"
             else:
                 proposed_value = await expected_value(session, event, proposal.intervention_type.value)
                 slot_granted, slot_reason = await arbitrate_contact_slot(session, event, proposed_value)
@@ -202,6 +219,7 @@ async def process_event(event_id: int, channel_name: str) -> None:
                     "draft_message": proposal.draft_message,
                     "bounds": BOUNDS[EventType(event.event_type)],
                     "critic_rationale": critic_verdict.rationale,
+                    "customer_trust": trust_label,
                 },
                 created_at=datetime.now(UTC),
             )

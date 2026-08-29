@@ -17,23 +17,97 @@ cards, real abandoned Orders, real overdue Invoices, real webhooks — not stage
 
 ## Why this, why now (the backward-research case)
 
-Razorpay shipped **Agent Studio** with a Subscription Recovery Agent and an Abandoned
-Cart Conversion Agent. That's a signal, not a threat: the company has already validated
-that agentic recovery is worth building internally. It also draws the map of where we
-add value instead of duplicating it:
+Razorpay didn't just validate this problem space in theory — it shipped into it. At
+FTX 2026 Razorpay launched **Agent Studio**, an AI-agent marketplace built on the
+Claude Agent SDK, with eight live agents: Dispute Responder, Subscription Recovery
+(now with outbound voice calls in English/Hindi via ElevenLabs), Abandoned Cart
+Conversion (via marketplace partners SuperU and Nugget by Zomato), RTO Shield, RTO
+Insights, Settlement Insights, and Cashflow Forecaster. That's the strongest possible
+confirmation this is a problem the company is actively, seriously solving right now —
+not a hackathon fiction.
 
-- **Direct overlap, by design:** our Mandate Agent (subscription) and Checkout Recovery
-  channels cover the same ground Razorpay's own agents cover — we don't avoid it, we show
-  our version is held to a stricter bar (adversarial verification, hard spend caps).
-- **White space:** one-off payment-failure retry and B2B receivables chasing are not
-  covered by Razorpay's shipped agents. That's real, unclaimed territory in the same
-  product surface.
-- **Structurally different from the rest of the market.** Chargebee Retain, Stripe
-  Smart Retries, Recurly Recovery — all classical ML propensity scoring, not LLM
-  reasoning. Nobody in this space runs an adversarial critic against its own proposals
-  or arbitrates scarce resources (discount budget, contact slots, escalation capacity)
-  across channels competing for the same customer. Those two pieces are the actual
-  differentiators, not "we used an LLM."
+Mapped against that real lineup, checked this session (2026-08-29), not assumed:
+
+- **Direct overlap, and Razorpay is ahead here.** Their Subscription Recovery agent
+  now places outbound voice calls — more mature than our text/link-based nudge. We
+  don't pretend otherwise. What we show instead is the same channel held to a
+  stricter, independently-arrived-at bar: adversarial self-checking (Critic) before
+  Guardrail approval, and cross-channel resource arbitration Razorpay's single-purpose
+  agents don't need to do.
+- **Genuine, still-open white space.** One-off (non-subscription) payment-failure
+  retry — new Order + Payment Link after a failed checkout — is not one of the eight
+  shipped agents. B2B invoice/receivables follow-up is mentioned once, in passing, as
+  a platform capability, but isn't a dedicated shipped agent either — soft white
+  space, not a clean claim, and we say so plainly rather than oversell it.
+- **The differentiator that survives contact with their real lineup.** Every one of
+  Razorpay's eight agents is scoped to a single channel. None of them arbitrate a
+  *shared, scarce* resource — discount budget, escalation slots, one-intervention-
+  per-customer — across channels competing for the same customer at the same time.
+  Recovery Mesh's Orchestrator/Guardrail does exactly that, live, under real
+  contention (see the escalation-cap saturation in Known Limitations below — that's
+  this exact mechanism firing for real, not a diagram).
+
+**The part that matters most for standing on our own: we didn't know any of this when
+we wrote Recovery Mesh's Guardrail.** Razorpay's own published Agent Studio
+principles — "the merchant is always in control," "agents don't set prices or invent
+discounts," "every action is validated before it executes," "every single action is
+logged with a full audit trail," "agents escalate ... rather than acting
+unilaterally," "no agent takes an irreversible action without explicit merchant
+approval," plus a dark-pattern prohibition against false urgency and confirm-shaming —
+read like a spec for the Guardrail we already built: deterministic bounds with zero
+LLM discretion in the approval path, hard discount ceilings pulled from config rather
+than invented by the Strategist, mandatory human escalation when bounds are exceeded,
+and a full audit trail for every decision. We arrived at the same governance shape
+independently, from first principles, before this research existed to confirm it.
+That's the actual case for "standalone": this isn't shaped to fit a hackathon rubric,
+it's shaped to clear the bar the platform itself now publishes.
+
+(Sources: [Razorpay Agent Studio](https://razorpay.com/agent-studio/),
+[Principles, Guardrails, and Merchant Control](https://razorpay.com/blog/razorpay-agent-studio-principles-guardrails-and-merchant-control/).)
+
+Outside Razorpay's own ecosystem the market is still classical ML propensity
+scoring — Chargebee Retain, Stripe Smart Retries, Recurly Recovery. 2026 industry
+figures put AI-driven dunning at recovering 65-80% of failed payments vs. 30-40% for
+rule-based dunning, and put $1-1.5M/year at risk per $10M ARR from first-attempt
+payment failures alone ([Stuut.ai, 2026](https://www.stuut.ai/blog/top-dunning-software-for-saas-companies-2026)) —
+the scale of problem this class of agent is built for, independent of which platform
+ships it.
+
+## Why Razorpay specifically benefits (not just the merchant)
+
+Easy to pitch this as "helps merchants recover lost sales" and stop there. From
+Razorpay's own seat as the platform, the incentive is sharper than that:
+
+- **It's revenue to Razorpay too, not just goodwill for merchants.** Razorpay earns
+  its fee on every processed transaction. A recovered payment link, a reactivated
+  subscription, a paid invoice isn't just money saved for the merchant — it's a
+  transaction that flows back through Razorpay's own rails and gets charged again.
+  Recovery Mesh is a volume-generation tool for Razorpay wearing a merchant-retention
+  costume.
+- **It fits their marketplace strategy exactly, at the moment it's open.** Agent
+  Studio launched with named "Build/Launch Partners" (SuperU, Nugget by Zomato) already
+  publishing agents into it — Razorpay wants an ecosystem around its rails rather than
+  building every vertical in-house, the same platform playbook as any app store. Their
+  eight shipped agents don't include one-off (non-subscription) payment-failure retry,
+  and receivables/invoice chasing is only mentioned in passing, not shipped. Recovery
+  Mesh sits in exactly that gap — shaped like a candidate marketplace submission, not a
+  one-off hackathon toy.
+- **It's a lower-risk reference implementation of the bar they just publicly set.**
+  Razorpay's own Agent Studio principles say agents can't set prices or invent
+  discounts, every action is validated before execution, agents escalate rather than
+  act unilaterally, and everything is audit-logged. Certifying third-party marketplace
+  agents against that bar is Razorpay's own review cost. A submission that already
+  enforces those exact constraints deterministically — our Guardrail has zero LLM
+  discretion in the approval path — is cheaper for them to trust and certify than one
+  they'd have to audit from scratch.
+- **Cross-channel arbitration is a gap in their current portfolio, not a feature.**
+  Every one of Razorpay's eight agents is scoped to a single channel. Nothing in their
+  shipped lineup stops a Subscription Recovery call and an Abandoned Cart nudge from
+  both hitting the same customer, or two agents from separately blowing a shared
+  discount budget. That's infrastructure Razorpay would want sitting *underneath* all
+  of its agents, not a feature it would build per-agent — and it's exactly what
+  Recovery Mesh's Orchestrator/Guardrail already does, live, under real contention (see
+  Known Limitations below).
 
 ## Architecture, one line per layer
 
@@ -53,9 +127,12 @@ Webhook / Poller → Detector → [4 concurrent channel agents: Triage → Strat
 - **Strategist** — proposes one intervention from a whitelist bounded by what's actually
   callable per event type. Never asserts a fact about payment/customer state it wasn't
   handed.
-- **Critic** — adversarial second check. Verifies the proposal's claims against the same
-  source data the Strategist saw, and separately checks for LLM over-concession
-  (documented failure mode in negotiation agents). Always returns a rationale, pass or fail.
+- **Critic** — adversarial second check, doubling as a **Compliance & Tone Guardrail**.
+  Verifies the proposal's claims against the same source data the Strategist saw, checks
+  for LLM over-concession (documented failure mode in negotiation agents), and — as of
+  this session — flags any drafted customer message for false urgency, confirm-shaming,
+  or bait-and-switch phrasing, mirroring Razorpay's own published dark-pattern
+  prohibition. Always returns a rationale, pass or fail, on every check.
 - **Orchestrator/Guardrail** — deterministic, no LLM in the approval path. Enforces
   per-event-type bounds (max attempts, cooldowns, discount ceilings), a batch-wide
   discount-spend cap, one-open-intervention-per-customer, an escalation-slot cap, and
@@ -65,6 +142,12 @@ Webhook / Poller → Detector → [4 concurrent channel agents: Triage → Strat
   charges), full before/after state logged.
 - **Learner** — Bayesian success-rate table keyed on (failure_reason, intervention_type,
   amount_bracket), updated the instant a matching webhook confirms the outcome.
+- **Trust Score** (Orchestrator) — a per-customer signal built only from that customer's
+  own real recovered/failed outcomes on their *other* events (`new` with no history,
+  `reliable`, `mixed`, `at_risk`), computed fresh before every Strategist call and fed
+  into it to calibrate tone — a reliable customer gets a lighter nudge, an at_risk one
+  gets a neutral, no-over-promising message. Zero fabricated signal: silent "new" prior
+  until a customer has real resolved history.
 
 ## Live demo script
 
@@ -119,6 +202,14 @@ cleaner "look, the bandit learned!" moment.
   event_type** — a checkout nudge and an invoice nudge with the same "not_applicable"
   failure reason currently pool into the same arm. Worth splitting if this goes further;
   flagged honestly rather than fixed under demo-week time pressure.
+- **We deliberately did not build a "Promise-to-Pay" feature** (customer replies "I'll
+  pay Friday" → tracked commitment → auto-follow-up), even though it was proposed this
+  session. There is no real two-way messaging channel in this build — nudges are
+  `nudge_simulated` — so making PTP demoable would mean an operator manually typing a
+  customer's "reply" into the dashboard. That fabricates a specific customer's specific
+  words and intent, a different and worse kind of staged than anything else here (which
+  is honest about infrastructure gaps, never about customer behavior). We built the
+  Trust Score instead — same "learning made visible" demo value, zero fabricated data.
 - **17 checkout-abandonment escalations saturated the batch-wide escalation cap (15)**,
   so most of the invoice batch's own escalation attempts got correctly rejected and
   landed in the exception list as `unresolved` rather than overriding the cap. This is

@@ -11,8 +11,9 @@ openai_client = AsyncOpenAI(api_key=settings.openai_api_key, timeout=30.0, max_r
 
 CRITIC_MODEL = "gpt-4o-mini"
 
-SYSTEM_PROMPT = """You are the Critic in a revenue recovery pipeline - an adversarial second check that runs
-before Guardrail signs off on the Strategist's proposal. You check two distinct things:
+SYSTEM_PROMPT = """You are the Critic in a revenue recovery pipeline - an adversarial second check, acting as
+a Compliance & Tone Guardrail, that runs before Guardrail signs off on the Strategist's proposal. You check
+three distinct things:
 
 1. GROUNDING: is every factual claim in the Strategist's reasoning actually grounded in the event data you
 are given below - nothing more? Flag any claim about the customer, payment, root cause, or situation that
@@ -25,15 +26,22 @@ specific number. If the proposal is a discount, check whether the requested disc
 justified by the stated reasoning, or looks like reflexive maximization against the ceiling you're given
 below, with no real justification for going that high.
 
-Default to grounded=true unless you can point to a SPECIFIC ungrounded claim or a SPECIFIC instance of
-unjustified over-concession.
+3. TONE & COMPLIANCE: if the proposal includes a draft_message, flag it if it uses false urgency (a fake or
+unbacked deadline, countdown pressure, "last chance" framing not tied to a real bound), confirm-shaming
+(guilt-tripping the customer for not having paid), or bait-and-switch phrasing (implying something different
+from what the intervention actually is). This mirrors Razorpay's own published Agent Studio requirement that
+agents avoid dark patterns. A plain, factual reminder - even a firm one - is compliant; manipulative framing
+is not. No draft_message (e.g. a payment-link or escalate proposal) is automatically compliant.
+
+Default to grounded=true and compliant=true unless you can point to a SPECIFIC ungrounded claim, a SPECIFIC
+instance of unjustified over-concession, or a SPECIFIC dark-pattern phrase in the draft_message.
 
 You must ALWAYS provide a one-sentence rationale, whether you pass or flag the proposal - this becomes part
 of a human-readable audit trail, so write a plain-English sentence someone with no other context could read
 and understand exactly what you checked and why you reached that verdict.
 
 Respond as strict JSON:
-{"grounded": true or false, "rationale": "one plain-English sentence explaining your verdict either way"}
+{"grounded": true or false, "compliant": true or false, "rationale": "one plain-English sentence explaining your verdict either way"}
 """
 
 
@@ -75,13 +83,17 @@ async def verify_proposal(
         )
     except Exception as exc:
         # A Critic outage should not silently pass proposals through unverified, but it
-        # also shouldn't be indistinguishable from an actual grounding/over-concession finding.
-        return CriticVerdict(grounded=False, rationale=f"critic call failed, treating as unverifiable: {exc}")
+        # also shouldn't be indistinguishable from an actual grounding/compliance finding.
+        return CriticVerdict(grounded=False, compliant=False, rationale=f"critic call failed, treating as unverifiable: {exc}")
 
     content = response.choices[0].message.content or "{}"
     try:
         parsed = json.loads(content)
         rationale = parsed.get("rationale") or "critic returned no rationale"
-        return CriticVerdict(grounded=bool(parsed.get("grounded", True)), rationale=rationale)
+        return CriticVerdict(
+            grounded=bool(parsed.get("grounded", True)),
+            compliant=bool(parsed.get("compliant", True)),
+            rationale=rationale,
+        )
     except (ValueError, json.JSONDecodeError):
-        return CriticVerdict(grounded=False, rationale="critic response could not be parsed")
+        return CriticVerdict(grounded=False, compliant=False, rationale="critic response could not be parsed")
