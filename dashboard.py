@@ -36,6 +36,14 @@ CHANNEL_AGENT_NAMES = {
     "Payment Retry Agent": "payment_failed", "Checkout Recovery Agent": "checkout_abandoned",
     "Receivables Negotiator Agent": "invoice_overdue", "Mandate Agent": "subscription_halted",
 }
+# Trust is a state, not an identity - reuses the reserved status hexes (good/warning/serious/
+# neutral) rather than inventing a new categorical palette to validate.
+TRUST_COLORS = {
+    "reliable": STATUS_COLORS["recovered"], "mixed": STATUS_COLORS["escalated"],
+    "at_risk": STATUS_COLORS["unresolved"], "new": STATUS_COLORS["superseded"],
+}
+TRUST_LABELS = {"reliable": "Reliable", "mixed": "Mixed", "at_risk": "At risk", "new": "New"}
+REJECTION_LAYER_LABELS = {"critic": "Critic", "orchestrator": "Orchestrator", "guardrail": "Guardrail bounds"}
 
 # ---- Two committed looks (not an automatic OS-detected flip - an explicit in-app
 # toggle) sharing the same validated categorical order, each re-stepped for its own
@@ -215,6 +223,28 @@ def bar_chart(counts: pd.Series, color_map: dict, label_map: dict, theme: dict):
     return fig
 
 
+def rejection_layer(reason) -> str:
+    """Buckets a real decisions.guardrail_reasoning string by which layer produced the
+    rejection. Matches both the current "critic (grounding|tone/compliance): ..." format
+    and the older plain "critic: ..." format so historical decisions bucket correctly too."""
+    if not isinstance(reason, str):
+        return "guardrail"
+    if reason.startswith("critic"):
+        return "critic"
+    if reason.startswith("orchestrator"):
+        return "orchestrator"
+    return "guardrail"
+
+
+def customer_trust_label(bounds_snapshot) -> str | None:
+    if not isinstance(bounds_snapshot, str) or not bounds_snapshot:
+        return None
+    try:
+        return json.loads(bounds_snapshot).get("customer_trust")
+    except (TypeError, ValueError):
+        return None
+
+
 st.markdown(
     '<div class="brand-row"><div class="brand-mark"></div><span class="brand-name">RECOVERY MESH</span></div>',
     unsafe_allow_html=True,
@@ -349,6 +379,79 @@ if not decisions.empty:
     st.dataframe(styled, width="stretch", hide_index=True)
 else:
     st.caption("No approved decisions yet.")
+
+st.divider()
+
+# ---- Guardrail & compliance activity (real numbers from decisions - proof the bounds
+# actually block things, not just log them) ----
+st.markdown('<div class="section-title">Guardrail & compliance activity</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-caption">what got blocked, and by which layer</div>', unsafe_allow_html=True)
+if not decisions.empty:
+    total_proposals = len(decisions)
+    approved_mask = decisions["guardrail_verdict"] == "approved"
+    approved_n = int(approved_mask.sum())
+
+    discount_props = decisions[decisions["intervention_type"] == "discount"]
+    escalate_props = decisions[decisions["intervention_type"] == "escalate"]
+    critic_flags = decisions["guardrail_reasoning"].apply(
+        lambda r: isinstance(r, str) and r.startswith("critic (tone/compliance)")
+    )
+
+    def _rate(subset, mask_col="guardrail_verdict"):
+        if subset.empty:
+            return "none proposed"
+        n_ok = int((subset[mask_col] == "approved").sum())
+        return f"{n_ok} approved ({n_ok / len(subset) * 100:.0f}%)"
+
+    gcols = st.columns(4)
+    gtiles = [
+        ("Proposals evaluated", f"{total_proposals}", f"{approved_n} approved · {total_proposals - approved_n} rejected"),
+        ("Discount requests", f"{len(discount_props)}", _rate(discount_props)),
+        ("Escalation requests", f"{len(escalate_props)}", _rate(escalate_props)),
+        ("Critic tone/compliance flags", f"{int(critic_flags.sum())}", f"out of {total_proposals} proposals checked"),
+    ]
+    for col, (label, value, delta) in zip(gcols, gtiles):
+        col.markdown(
+            f"""<div class="stat-tile"><div class="label">{label}</div>
+            <div class="value">{value}</div><div class="delta">{delta}</div></div>""",
+            unsafe_allow_html=True,
+        )
+
+    rejected = decisions[~approved_mask].copy()
+    if not rejected.empty:
+        rejected["layer"] = rejected["guardrail_reasoning"].apply(rejection_layer)
+        layer_counts = rejected["layer"].value_counts()
+        st.plotly_chart(
+            bar_chart(layer_counts, T["agent_dots"], REJECTION_LAYER_LABELS, T),
+            width="stretch", config={"displayModeBar": False},
+        )
+    else:
+        st.caption("No rejections yet.")
+else:
+    st.caption("No proposals evaluated yet.")
+
+st.divider()
+
+# ---- Customer trust distribution (real per-customer recovered/failed history, not
+# fabricated - see PITCH.md for why this replaced Promise-to-Pay) ----
+st.markdown('<div class="section-title">Customer trust distribution</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-caption">current trust label per customer, fed into the Strategist\'s tone</div>', unsafe_allow_html=True)
+if not decisions.empty:
+    trusted = decisions.merge(events[["id", "customer_id"]], left_on="event_id", right_on="id", suffixes=("", "_event"))
+    trusted["customer_trust"] = trusted["bounds_snapshot"].apply(customer_trust_label)
+    trusted = trusted[trusted["customer_id"].notna() & trusted["customer_trust"].notna()]
+    if not trusted.empty:
+        latest_per_customer = trusted.sort_values("created_at").groupby("customer_id").tail(1)
+        trust_counts = latest_per_customer["customer_trust"].value_counts()
+        st.plotly_chart(
+            bar_chart(trust_counts, TRUST_COLORS, TRUST_LABELS, T),
+            width="stretch", config={"displayModeBar": False},
+        )
+        st.caption(f"{latest_per_customer['customer_id'].nunique()} customers with a computed trust label")
+    else:
+        st.caption("No trust-scored decisions yet - populates as new proposals run under the updated pipeline.")
+else:
+    st.caption("No proposals evaluated yet.")
 
 st.divider()
 
