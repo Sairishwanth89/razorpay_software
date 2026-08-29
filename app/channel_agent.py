@@ -162,7 +162,7 @@ async def process_event(event_id: int, channel_name: str) -> None:
         for _ in range(MAX_CONSECUTIVE_REJECTIONS):
             proposal = await propose_intervention(event, attempt_number, prior_types, customer_trust=trust_label)
 
-            critic_verdict = await verify_proposal(event, proposal, attempt_number, prior_types)
+            critic_verdict = await verify_proposal(event, proposal, attempt_number, prior_types, customer_trust=trust_label)
             if critic_verdict.grounded and critic_verdict.compliant:
                 critic_action = "verified"
             elif not critic_verdict.grounded:

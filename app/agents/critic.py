@@ -46,7 +46,11 @@ Respond as strict JSON:
 
 
 async def verify_proposal(
-    event: Event, proposal: StrategistProposal, attempt_number: int, prior_intervention_types: list[str]
+    event: Event,
+    proposal: StrategistProposal,
+    attempt_number: int,
+    prior_intervention_types: list[str],
+    customer_trust: str = "new",
 ) -> CriticVerdict:
     # Must mirror exactly what the Strategist itself was given (app.agents.strategist) -
     # otherwise a true claim grounded in data the Critic wasn't shown (e.g. attempt_number)
@@ -60,6 +64,7 @@ async def verify_proposal(
         "currency": event.currency,
         "attempt_number": attempt_number,
         "prior_intervention_types_this_event": prior_intervention_types,
+        "customer_trust": customer_trust,
     }
     user_content = {
         "source_data_actually_fetched": source_data,
