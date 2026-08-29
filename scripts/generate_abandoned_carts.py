@@ -15,21 +15,29 @@ AMOUNT_PLAN = (
     + [(round(12000000 + i * 4000000)) for i in range(3)]  # above_1L: ~1.2L-2L
 )
 
+# Orders have no native customer field on Razorpay's side - a real abandoned checkout
+# never gets far enough to attach payment-level contact info. Cycling through a small
+# pool of shopper IDs (instead of one per order) gives repeat-abandoner behavior a real
+# chance to happen - Trust Score, contact-slot arbitration, and suppression all key off
+# customer_id, and none of them can engage at all if every order looks like a stranger.
+SHOPPER_POOL = [f"cust_shopper_{i:02d}" for i in range(8)]
+
 SCRIPTS_DIR = Path(__file__).parent
 
 
 def build():
     orders = []
     for i, amount in enumerate(AMOUNT_PLAN):
+        shopper_id = SHOPPER_POOL[i % len(SHOPPER_POOL)]
         order = client.order.create(
             {
                 "amount": amount,
                 "currency": "INR",
-                "notes": {"test_scenario": "abandoned_cart", "batch_index": str(i)},
+                "notes": {"test_scenario": "abandoned_cart", "batch_index": str(i), "customer_id": shopper_id},
             }
         )
-        orders.append({"order_id": order["id"], "amount": amount, "index": i})
-        print(f"[{i + 1}/{len(AMOUNT_PLAN)}] created abandoned order {order['id']} for INR {amount / 100:.2f}")
+        orders.append({"order_id": order["id"], "amount": amount, "index": i, "customer_id": shopper_id})
+        print(f"[{i + 1}/{len(AMOUNT_PLAN)}] created abandoned order {order['id']} for INR {amount / 100:.2f} (shopper {shopper_id})")
         time.sleep(0.5)
 
     (SCRIPTS_DIR / "abandoned_cart_orders.json").write_text(json.dumps(orders, indent=2), encoding="utf-8")

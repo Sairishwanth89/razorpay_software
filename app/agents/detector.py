@@ -113,7 +113,12 @@ def poll_abandoned_orders() -> list[RevenueAtRiskEvent]:
                 event_type=EventType.checkout_abandoned,
                 source="poller",
                 razorpay_entity_id=order["id"],
-                customer_id=None,
+                # Orders have no native customer field (unlike Invoices) - a real
+                # abandoned checkout never gets far enough to attach payment-level
+                # contact info. Real test-data generation stores an identity in notes
+                # (a real, persisted Razorpay field); reads back real data if present,
+                # None if not - never fabricated after the fact.
+                customer_id=(order.get("notes") or {}).get("customer_id"),
                 failure_reason=None,
                 amount=order.get("amount"),
                 currency=order.get("currency", "INR"),
